@@ -194,8 +194,8 @@ int main(int argc, char *argv[]){
     }
 
     /* tableファイルと、patternファイルの文字列を準備 */
-    strcpy(table, "Table/");
-    strcpy(pattern, "Pattern/");
+    strcpy(table, "iscas85/Table/");
+    strcpy(pattern, "iscas85/Pattern/");
     strcat(table, argv[1]);
     strcat(pattern, argv[2]);
 
