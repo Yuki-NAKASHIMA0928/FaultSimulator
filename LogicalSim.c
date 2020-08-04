@@ -85,17 +85,21 @@ void LogicCalc(SigLine* sigLine, int i, int j, int pointer[], int cnt[], int **t
 
     /* type:外部出力線(4) */
     else if(sigLine[j].type == 4){
-        printf("%d ", sigLine[j].value[0]);
+        //printf("%d ", sigLine[j].value[0]);
+        sigLine[sigLine[j].inputLine-1].value[0] = sigLine[j].value[0];
     }
 
     /* type:EXOR(5) */
     else if(sigLine[j].type == 5){
         int flag = 1;
 
+        //printf("EXOR:");
         if(sigLine[j].value[0] == sigLine[j].value[1]){         // EXOR論理では、2つの値が同値なら出力は"0"
+            //printf("%2d ", sigLine[j].value[k]);
             flag = 0;                                           // 同値ならフラグを降ろす
         }
-        
+        //printf("\n");
+
         PassOutLine(sigLine, j, pointer, flag, cnt);
     }
     /* type:FF(6) */
@@ -132,7 +136,7 @@ void LogicCalc(SigLine* sigLine, int i, int j, int pointer[], int cnt[], int **t
                 break;
             }
         }
-        // printf("\n");
+        //printf("\n");
         
         PassOutLine(sigLine, j, pointer, flag, cnt);     // 出力線に値を渡す
     }
@@ -180,7 +184,7 @@ void Enqueue(int queue[], int end, int num){
 
 int main(int argc, char *argv[]){
     FILE *fp;
-    int sigNum, pNum, testNum, input;   // 信号線数、ポインタ数、テストパターン数、入力線数
+    int sigNum, pNum, testNum, input, output, *outList;   // 信号線数、ポインタ数、テストパターン数、入力線数、外部出力線数、外部出力線リスト
     SigLine *sigLine;   // リスト1
     int *pointer;       // リスト2
     int **test;         // テストパターン
@@ -255,7 +259,25 @@ int main(int argc, char *argv[]){
     }
     */
 
+    /* 外部入力線数を取得 */
     fscanf(fp, "%d", &input);
+
+    /* 外部出力線数まで読み飛ばし */
+    int skip;
+    for(int i = 0; i < input; i++){
+        fscanf(fp, "%d", &skip);
+    }
+
+    /* 外部出力線数を取得 */
+    fscanf(fp, "%d", &output);
+
+    /* output個のoutListを確保 */
+    outList = (int*)malloc(output * sizeof(int));
+
+    /* 読み込み処理 */
+    for(int i = 0; i < output; i++){
+        fscanf(fp, "%d", &outList[i]);
+    }
 
     fclose(fp);
 
@@ -270,8 +292,6 @@ int main(int argc, char *argv[]){
     fscanf(fp, "%d", &testNum);
     //printf("number of test patterns:%d\n", testNum);
 
-
-
     /* testNum * input個のtestを確保 */
     test = malloc(testNum * sizeof(int*));
     for(int i = 0; i < testNum; i++){
@@ -284,6 +304,8 @@ int main(int argc, char *argv[]){
             fscanf(fp, "%d", &test[i][j]);
         }
     }
+
+    fclose(fp);
 
     /* 読み取り確認用 */
     /*
@@ -328,66 +350,17 @@ int main(int argc, char *argv[]){
         }
 
         for(int j = 0; j < sigNum; j++){    // 全信号線の繰り返し(j=信号線の番号-1)
-
-            /* 計算されていない入力線が存在する時のエラー確認 */
-            /*
-            if(sigLine[j].type != 0){
-                int inputline = sigLine[j].inputLine - 1;
-                if(sigLine[j].inputNum == 1){  
-                    if(sigLine[inputline].value[0] == -1){
-                        printf("Error\n");
-                        return 1;
-                    }
-                }
-                else if(sigLine[j].inputNum >= 2){  
-                    for(int k = 0; k < sigLine[j].inputNum; k++){
-                        int p = pointer[inputline+k] - 1;
-                        if(sigLine[p].value[0] == -1){
-                            printf("Error\n");
-                            return 1;
-                        }
-                    }
-                }
-            }
-            */
-
             /* 計算されていない入力線が存在するかの確認 */
             enqueued = 0;
-            if(sigLine[j].type != 0){
-                /*
-                int inputline = sigLine[j].inputLine - 1;
-                if(sigLine[j].inputNum == 1){  
-                    if(sigLine[inputline].value[0] == -1){
-                        enqueued = 1;
-                    }
-                }
-                else if(sigLine[j].inputNum >= 2){  
-                    for(int k = 0; k < sigLine[j].inputNum; k++){
-                        int p = pointer[inputline+k] - 1;
-                        if(sigLine[p].value[0] == -1){
-                            enqueued = 1;
-                            break;
-                        }
-                    }
-                }
-                */
-                /*
-                for(int k = 0; k < sigLine[j].inputNum; k++){
-                    if(sigLine[j].value[k] == -1){
-                       enqueued = 1;
-                    }
-                }
-                */
-                
+            if(sigLine[j].type != 0){               
                 if(cnt[j] < sigLine[j].inputNum){
                    enqueued = 1;
-                }
-                
+                }              
             }
             
             
             if(enqueued == 0){
-                LogicCalc(sigLine, i, j, pointer, cnt, test);   // 入力線の値を決定する
+                LogicCalc(sigLine, i, j, pointer, cnt, test);   // 信号線の値を決定する
             }
             else{
                 end++;
@@ -410,45 +383,57 @@ int main(int argc, char *argv[]){
             int num;    // デキューした値を格納する変数
             num = Dequeue(queue, work, end);     // 信号線番号を1つ取り出す
             end--;
-            if(sigLine[num].type != 0){
-                int inputline = sigLine[num].inputLine - 1;
-                if(sigLine[num].inputNum == 1){  
-                    if(sigLine[inputline].value[0] == -1){
-                        end++;
-                        Enqueue(queue, end, num);
-                    }
-                    else{
-                        LogicCalc(sigLine, i, num, pointer, cnt, test);   // 入力線の値を決定する
-                    }
+
+            /*
+            int inputline = sigLine[num].inputLine - 1;
+            if(sigLine[num].inputNum == 1){  
+                if(sigLine[inputline].value[0] == -1){
+                    end++;
+                    Enqueue(queue, end, num);
                 }
-                else if(sigLine[num].inputNum >= 2){  
-                    for(int k = 0; k < sigLine[num].inputNum; k++){
-                        int p = pointer[inputline+k] - 1;
-                        if(sigLine[p].value[0] == -1){
-                            end++;
-                            Enqueue(queue, end, num);                        
-                            break;
-                        }
-                        else if(sigLine[p].value[0] != -1 && k == sigLine[num].inputNum - 1){
-                            LogicCalc(sigLine, i, num, pointer, cnt, test);   // 入力線の値を決定する
-                        }
+                else{
+                    LogicCalc(sigLine, i, num, pointer, cnt, test);   // 信号線の値を決定する
+                }
+            }
+            else if(sigLine[num].inputNum >= 2){  
+                for(int k = 0; k < sigLine[num].inputNum; k++){
+                    int p = pointer[inputline+k] - 1;
+                    if(sigLine[p].value[0] == -1){
+                        end++;
+                        Enqueue(queue, end, num);                     
+                        break;
+                    }
+                    else if(sigLine[p].value[0] != -1 && k == sigLine[num].inputNum - 1){
+                        LogicCalc(sigLine, i, num, pointer, cnt, test);   // 信号線の値を決定する
                     }
                 }
             }
+            */
+            
+            if(cnt[num] < sigLine[num].inputNum){
+                end++;
+                Enqueue(queue, end, num);
+            }
+            else{
+                LogicCalc(sigLine, i, num, pointer, cnt, test);   // 信号線の値を決定する
+            }
+            
 
             finish++;
-
+            /*
             if(finish > 100000){
                 printf("infinite loop error.\n");
                 return 1;
             }
+            */
+        }
+
+        for(int j = 0; j < output; j++){
+            printf("%d ", sigLine[outList[j]-1].value[0]);
         }
         
         printf("\n");
     }
-    
-
-    fclose(fp);
 
     printf("\n");
 
