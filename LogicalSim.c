@@ -15,6 +15,8 @@ typedef struct sigLineTable
 
 /* 渡された値を決められた出力線に渡す */
 void PassOutLine(SigLine* sigLine, int index, int pointer[], int value, int cnt[]){
+    sigLine[index].value[0] = value;
+
     int line = sigLine[index].outputLine - 1;       // 配列は"0"始まり、リストは"1"始まりなので-1する必要がある
     if(sigLine[index].outputNum == 1){  // 指定された出力線に値を受け渡す
         sigLine[line].value[cnt[line]] = value;
@@ -184,33 +186,44 @@ void Enqueue(int queue[], int end, int num){
 
 int main(int argc, char *argv[]){
     FILE *fp;
+    char table[64], pattern[64], answer[64];
+
     int sigNum, pNum, testNum, input, output, *outList;   // 信号線数、ポインタ数、テストパターン数、入力線数、外部出力線数、外部出力線リスト
     SigLine *sigLine;   // リスト1
     int *pointer;       // リスト2
     int **test;         // テストパターン
+    int **exp, equal = 1;       // 正しいテスト結果とそれを判別するためのフラグ
+
     int *queue, *work, end = -1;  // キューと作業用配列とキューのポインタ
     int enqueued;       // 入力線の値を決められない時に真を取るフラグ
-    char table[64], pattern[64];
 
-    if(argc < 3){
+
+    if(argc < 2){
         printf("Not enough arguments.\n");
         return 1;
     }
 
-    /* tableファイルと、patternファイルの文字列を準備 */
+    /* tableファイル、patternファイル、answerファイルの文字列を準備 */
     strcpy(table, "iscas85/Table/");
-    strcpy(pattern, "iscas85/Pattern/");
     strcat(table, argv[1]);
-    strcat(pattern, argv[2]);
+    strcat(table, ".tbl");
+
+    strcpy(pattern, "iscas85/Pattern/");
+    strcat(pattern, argv[1]);
+    strcat(pattern, ".pat");
+
+    strcpy(answer, "iscas85/Testcase/");
+    strcat(answer, argv[1]);
+    strcat(answer, ".ans");
 
     /* 回路テーブルのファイルをオープン */
     fp = fopen(table,"r");
     if(fp == NULL){
-        printf("Cannot open %s.\n", argv[1]);
+        printf("Cannot open '%s.tbl'.\n", argv[1]);
         exit(1);
     }
 
-    printf("filename:%s\n", argv[1]);
+    printf("filename:%s.\n", argv[1]);
 
     /* 信号線の数を取得 */
     fscanf(fp, "%d", &sigNum);
@@ -284,7 +297,7 @@ int main(int argc, char *argv[]){
     /* テストパターンのファイルをオープン */
     fp = fopen(pattern,"r");
     if(fp == NULL){
-        printf("Cannot open %s.\n", argv[2]);
+        printf("Cannot open '%s.pat'.\n", argv[1]);
         exit(1);
     }
 
@@ -307,6 +320,28 @@ int main(int argc, char *argv[]){
 
     fclose(fp);
 
+    /* テスト結果のファイルをオープン */
+    fp = fopen(answer,"r");
+    if(fp == NULL){
+        printf("Cannot open '%s.ans'.\n", argv[1]);
+        exit(1);
+    }
+
+    /* testNum * input個のexpを確保 */
+    exp =malloc(testNum * sizeof(int*));
+    for(int i = 0; i < testNum; i++){
+        exp[i] = malloc(output * sizeof(int));
+    }    
+
+    /* 読み込み処理 */
+    for(int i = 0; i < testNum; i++){
+        for(int j = 0; j < output; j++){
+            fscanf(fp, "%d", &exp[i][j]);
+        }
+    }
+
+    fclose(fp);       
+
     /* 読み取り確認用 */
     /*
     for(int i = 0; i < testNum; i++){
@@ -316,11 +351,12 @@ int main(int argc, char *argv[]){
         printf("\n");
     }
     */
-
+    /* 信号線に、その信号線の入力線数だけ値を格納できるようにする */
     for(int i = 0; i < sigNum; i++){
         sigLine[i].value = (int*)malloc(sigLine[i].inputNum * sizeof(int));
     }
 
+    /* 信号線の値の初期化 */
     for(int i = 0; i < sigNum; i++){
         for(int j = 0; j < sigLine[i].inputNum; j++){
             sigLine[i].value[j] = -1;
@@ -342,7 +378,7 @@ int main(int argc, char *argv[]){
         for(int j = 0; j < sigNum; j++){
             cnt[j] = 0;
         }
-        /* 入力線の値の初期化 */
+        /* 信号線の値の初期化 */
         for(int j = 0; j <sigNum; j++){
             for(int k = 0; k < sigLine[j].inputNum; k++){
                 sigLine[j].value[k] = -1;
@@ -376,39 +412,14 @@ int main(int argc, char *argv[]){
         }
 
         int finish = 0;     // 無限ループ回避のための変数
-
+        int num;    // デキューした値を格納する変数
+        
         /* キューの中身を見ていく */
         while(end >= 0)
         {   
-            int num;    // デキューした値を格納する変数
+
             num = Dequeue(queue, work, end);     // 信号線番号を1つ取り出す
             end--;
-
-            /*
-            int inputline = sigLine[num].inputLine - 1;
-            if(sigLine[num].inputNum == 1){  
-                if(sigLine[inputline].value[0] == -1){
-                    end++;
-                    Enqueue(queue, end, num);
-                }
-                else{
-                    LogicCalc(sigLine, i, num, pointer, cnt, test);   // 信号線の値を決定する
-                }
-            }
-            else if(sigLine[num].inputNum >= 2){  
-                for(int k = 0; k < sigLine[num].inputNum; k++){
-                    int p = pointer[inputline+k] - 1;
-                    if(sigLine[p].value[0] == -1){
-                        end++;
-                        Enqueue(queue, end, num);                     
-                        break;
-                    }
-                    else if(sigLine[p].value[0] != -1 && k == sigLine[num].inputNum - 1){
-                        LogicCalc(sigLine, i, num, pointer, cnt, test);   // 信号線の値を決定する
-                    }
-                }
-            }
-            */
             
             if(cnt[num] < sigLine[num].inputNum){
                 end++;
@@ -418,21 +429,31 @@ int main(int argc, char *argv[]){
                 LogicCalc(sigLine, i, num, pointer, cnt, test);   // 信号線の値を決定する
             }
             
-
+            /* 無限ループの確認(10万回で終了) */
             finish++;
-            /*
             if(finish > 100000){
                 printf("infinite loop error.\n");
                 return 1;
             }
-            */
+            
         }
 
         for(int j = 0; j < output; j++){
-            printf("%d ", sigLine[outList[j]-1].value[0]);
+            //printf("%d ", sigLine[outList[j]-1].value[0]);
+            if(sigLine[outList[j]-1].value[0] != exp[i][j]){    //テスト結果と期待値が同値であるかの確認
+                equal = 0;
+            }
         }
         
-        printf("\n");
+        //printf("\n");
+    }
+
+    /* テスト結果と期待値が同値であるかの確認 */
+    if(equal == 0){
+        printf("Result does NOT agree with answer.");
+    }
+    else{
+        printf("Result agrees with answer.");        
     }
 
     printf("\n");
